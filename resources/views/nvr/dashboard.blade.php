@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>NVR Control Center</title>
-    <link rel="stylesheet" href="{{ asset('css/nvr-dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/nvr-dashboard.css') }}?v={{ filemtime(public_path('css/nvr-dashboard.css')) }}">
     <script>
         window.NVR_CONFIG = {
             dataUrl: @json(route('dashboard.data')),
@@ -15,7 +15,7 @@
             checkAllUrl: @json(route('devices.check-all'))
         };
     </script>
-    <script src="{{ asset('js/nvr-dashboard.js') }}" defer></script>
+    <script src="{{ asset('js/nvr-dashboard.js') }}?v={{ filemtime(public_path('js/nvr-dashboard.js')) }}" defer></script>
 </head>
 <body data-view="{{ $inventoryPage ? 'inventory' : 'overview' }}">
     <div class="app-shell">
@@ -30,7 +30,7 @@
                     <a class="nav-link {{ $inventoryPage ? 'active' : '' }}" href="{{ route('devices.inventory') }}">▤ Device inventory <span class="nav-count" id="device-count">0</span></a>
                 </nav>
                 <div class="topbar-actions">
-                    <span class="sync-label"><span class="pulse-dot"></span><span id="last-updated">Connecting…</span></span>
+                    <span class="sync-label"><span class="pulse-dot"></span><span id="last-updated">Waiting for ping…</span></span>
                     <button class="button button-quiet" id="refresh-button" type="button"><span class="refresh-icon">↻</span> Refresh</button>
                 </div>
             </header>

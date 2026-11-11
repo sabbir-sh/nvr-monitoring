@@ -143,6 +143,7 @@
         try {
             const response = await fetch(`${config.dataUrl}?${parameters}`, {
                 headers: { Accept: 'application/json' },
+                cache: 'no-store',
                 signal: controller.signal
             });
             if (!response.ok) throw new Error('Could not load dashboard data.');
@@ -169,7 +170,12 @@
             document.getElementById('page-number').textContent = `${page} / ${lastPage}`;
             document.getElementById('previous-page').disabled = page <= 1;
             document.getElementById('next-page').disabled = page >= lastPage;
-            document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+            const lastChecked = result.checked_at
+                ? new Date(result.checked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : null;
+            document.getElementById('last-updated').textContent = lastChecked
+                ? `Last ping ${lastChecked}`
+                : 'Waiting for ping…';
         } catch (error) {
             const message = error.name === 'AbortError'
                 ? 'Dashboard request timed out. Check the Laravel server and database.'

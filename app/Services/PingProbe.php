@@ -13,18 +13,18 @@ class PingProbe
     {
         $timeoutMilliseconds = max(1, (int) round($timeout * 1000));
         $command = PHP_OS_FAMILY === 'Windows'
-            ? ['ping', '-n', '3', '-w', (string) $timeoutMilliseconds, $ip]
-            : ['ping', '-c', '3', '-W', (string) max(1, (int) ceil($timeout)), $ip];
+            ? ['ping', '-n', '1', '-w', (string) $timeoutMilliseconds, $ip]
+            : ['ping', '-c', '1', '-W', (string) max(1, (int) ceil($timeout)), $ip];
         $process = new Process($command);
-        $process->setTimeout(($timeout * 3) + 1);
+        $process->setTimeout($timeout + 2);
         $process->run();
-        return $this->parseOutput($process->getOutput(), $process->isSuccessful(), $ip);
+        return $this->parseOutput($process->getOutput(), $ip);
     }
 
     /**
      * @return array{online: bool, latency_ms: int|null, message: string|null}
      */
-    public function parseOutput(string $output, bool $commandSucceeded, string $targetIp): array
+    public function parseOutput(string $output, string $targetIp): array
     {
         $sent = 0;
         $targetReplies = 0;
@@ -55,12 +55,12 @@ class PingProbe
             }
         }
 
-        if (! $commandSucceeded || $sent !== 3 || $targetReplies < 2) {
-            $message = $targetReplies > 0
-                ? "Incomplete ping response ({$targetReplies} of {$sent} replies from target)."
-                : "No ping response from {$targetIp}.";
-
-            return ['online' => false, 'latency_ms' => null, 'message' => $message];
+        if ($sent < 1 || $targetReplies === 0) {
+            return [
+                'online' => false,
+                'latency_ms' => null,
+                'message' => "No ping response from {$targetIp}.",
+            ];
         }
 
         $latency = null;

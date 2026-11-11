@@ -18,6 +18,7 @@ class NvrMonitoringTest extends TestCase
 
     public function test_dashboard_displays_inventory_and_summary(): void
     {
+        Queue::fake();
         NvrDevice::create([
             'name' => 'Main Gate',
             'ip' => '192.168.1.201',
@@ -35,6 +36,8 @@ class NvrMonitoringTest extends TestCase
             ->assertJsonPath('summary.total', 1)
             ->assertJsonPath('summary.online', 1)
             ->assertJsonPath('devices.0.name', 'Main Gate');
+
+        Queue::assertPushed(CheckNvrReachability::class, fn (CheckNvrReachability $job) => $job->deviceId === 1);
     }
 
     public function test_device_inventory_has_a_separate_compact_grid_page(): void
@@ -53,6 +56,7 @@ class NvrMonitoringTest extends TestCase
 
     public function test_device_inventory_returns_eight_devices_per_page(): void
     {
+        Queue::fake();
         for ($number = 1; $number <= 9; $number++) {
             NvrDevice::create([
                 'name' => sprintf('Recorder %02d', $number),
@@ -129,27 +133,18 @@ class NvrMonitoringTest extends TestCase
         $this->assertSame(1, NvrHealthCheck::where('nvr_device_id', $device->id)->count());
     }
 
-    public function test_ping_probe_requires_two_of_three_replies_to_mark_device_online(): void
+    public function test_ping_probe_marks_a_device_online_after_any_target_reply(): void
     {
         $probe = new PingProbe;
-        $majorityReply = "Reply from 192.168.0.196: bytes=32 time=4ms TTL=64\n"
-            ."Reply from 192.168.0.196: bytes=32 time=6ms TTL=64\n"
-            ."Packets: Sent = 3, Received = 2, Lost = 1 (33% loss)\n"
-            ."Approximate round trip times in milli-seconds: Minimum = 4ms, Maximum = 6ms, Average = 5ms";
-        $singleReply = "Reply from 192.168.0.196: bytes=32 time=4ms TTL=64\n"
-            ."Packets: Sent = 3, Received = 1, Lost = 2 (67% loss)";
+        $reply = "Reply from 192.168.0.196: bytes=32 time=4ms TTL=64\n"
+            ."Packets: Sent = 1, Received = 1, Lost = 0 (0% loss)\n"
+            ."Approximate round trip times in milli-seconds: Minimum = 4ms, Maximum = 4ms, Average = 4ms";
 
         $this->assertSame([
             'online' => true,
-            'latency_ms' => 5,
+            'latency_ms' => 4,
             'message' => null,
-        ], $probe->parseOutput($majorityReply, true, '192.168.0.196'));
-
-        $this->assertSame([
-            'online' => false,
-            'latency_ms' => null,
-            'message' => 'Incomplete ping response (1 of 3 replies from target).',
-        ], $probe->parseOutput($singleReply, true, '192.168.0.196'));
+        ], $probe->parseOutput($reply, '192.168.0.196'));
     }
 
     public function test_router_unreachable_replies_do_not_mark_target_online(): void
@@ -157,14 +152,13 @@ class NvrMonitoringTest extends TestCase
         $probe = new PingProbe;
         $output = "Reply from 192.168.0.194: Destination host unreachable.\n"
             ."Reply from 192.168.0.194: Destination host unreachable.\n"
-            ."Reply from 192.168.0.194: Destination host unreachable.\n"
-            ."Packets: Sent = 3, Received = 3, Lost = 0 (0% loss)";
+            ."Packets: Sent = 1, Received = 1, Lost = 0 (0% loss)";
 
         $this->assertSame([
             'online' => false,
             'latency_ms' => null,
             'message' => 'No ping response from 192.168.0.196.',
-        ], $probe->parseOutput($output, true, '192.168.0.196'));
+        ], $probe->parseOutput($output, '192.168.0.196'));
     }
 
     public function test_incomplete_ping_keeps_an_offline_device_offline(): void

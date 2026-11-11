@@ -7,6 +7,7 @@ use App\Models\NvrDevice;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,21 @@ class NvrDeviceController extends Controller
 
     public function dashboardData(Request $request): JsonResponse
     {
+        $staleBefore = now()->subSeconds(5);
+
+        NvrDevice::query()
+            ->where('enabled', true)
+            ->where(function (Builder $builder) use ($staleBefore): void {
+                $builder->whereNull('last_checked_at')
+                    ->orWhere('last_checked_at', '<=', $staleBefore);
+            })
+            ->select('id')
+            ->chunkById(200, function ($devices): void {
+                foreach ($devices as $device) {
+                    CheckNvrReachability::dispatch($device->id);
+                }
+            });
+
         $query = NvrDevice::query();
         $search = trim((string) $request->query('search', ''));
         $status = $request->query('status');
@@ -47,6 +63,8 @@ class NvrDeviceController extends Controller
 
         $devices = $query->orderBy('name')->paginate(8)->withQueryString();
 
+        $checkedAt = NvrDevice::query()->max('last_checked_at');
+
         return response()->json([
             'devices' => $devices->items(),
             'pagination' => [
@@ -56,7 +74,9 @@ class NvrDeviceController extends Controller
                 'total' => $devices->total(),
             ],
             'summary' => $this->summary(),
-            'checked_at' => NvrDevice::query()->max('last_checked_at'),
+            'checked_at' => $checkedAt
+                ? Carbon::parse($checkedAt, config('app.timezone'))->toIso8601String()
+                : null,
         ]);
     }
 
