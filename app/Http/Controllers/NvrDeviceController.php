@@ -16,7 +16,12 @@ class NvrDeviceController extends Controller
 {
     public function index()
     {
-        return view('nvr.dashboard');
+        return view('nvr.dashboard', ['inventoryPage' => false]);
+    }
+
+    public function inventory()
+    {
+        return view('nvr.dashboard', ['inventoryPage' => true]);
     }
 
     public function dashboardData(Request $request): JsonResponse
@@ -40,13 +45,14 @@ class NvrDeviceController extends Controller
             $query->where('enabled', false);
         }
 
-        $devices = $query->orderBy('name')->paginate(50)->withQueryString();
+        $devices = $query->orderBy('name')->paginate(8)->withQueryString();
 
         return response()->json([
             'devices' => $devices->items(),
             'pagination' => [
                 'current_page' => $devices->currentPage(),
                 'last_page' => $devices->lastPage(),
+                'per_page' => $devices->perPage(),
                 'total' => $devices->total(),
             ],
             'summary' => $this->summary(),
@@ -229,8 +235,8 @@ class NvrDeviceController extends Controller
     {
         return [
             'total' => NvrDevice::count(),
-            'online' => NvrDevice::where('status', 'online')->count(),
-            'offline' => NvrDevice::where('status', 'offline')->count(),
+            'online' => NvrDevice::where('enabled', true)->where('status', 'online')->count(),
+            'offline' => NvrDevice::where('enabled', true)->where('status', 'offline')->count(),
             'unknown' => NvrDevice::where('enabled', true)->where('status', 'unknown')->count(),
             'disabled' => NvrDevice::where('enabled', false)->count(),
         ];

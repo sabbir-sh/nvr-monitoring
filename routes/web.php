@@ -4,6 +4,7 @@ use App\Http\Controllers\NvrDeviceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [NvrDeviceController::class, 'index'])->name('dashboard');
+Route::get('/devices/inventory', [NvrDeviceController::class, 'inventory'])->name('devices.inventory');
 Route::get('/dashboard/data', [NvrDeviceController::class, 'dashboardData'])->name('dashboard.data');
 Route::get('/devices/import-template', [NvrDeviceController::class, 'importTemplate'])->name('devices.import-template');
 Route::post('/devices/import', [NvrDeviceController::class, 'import'])->name('devices.import');

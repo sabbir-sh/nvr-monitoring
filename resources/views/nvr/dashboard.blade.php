@@ -17,31 +17,25 @@
     </script>
     <script src="{{ asset('js/nvr-dashboard.js') }}" defer></script>
 </head>
-<body>
+<body data-view="{{ $inventoryPage ? 'inventory' : 'overview' }}">
     <div class="app-shell">
-        <aside class="sidebar">
-            <a class="brand" href="{{ route('dashboard') }}">
-                <span class="brand-mark">N</span>
-                <span><strong>nvr<span>desk</span></strong><small>MONITORING CENTER</small></span>
-            </a>
-            <div class="nav-caption">WORKSPACE</div>
-            <a class="nav-link active" href="{{ route('dashboard') }}"><span class="nav-icon">◈</span> Overview</a>
-            <a class="nav-link" href="#device-inventory"><span class="nav-icon">▤</span> Device inventory <span class="nav-count" id="sidebar-device-count">0</span></a>
-            <div class="sidebar-bottom">
-                <div class="connection-indicator"><span class="pulse-dot"></span><span><strong>Local network</strong><small>Monitor is ready</small></span></div>
-                <div class="sidebar-note">Keep this dashboard on the same LAN as your NVRs for accurate checks.</div>
-            </div>
-        </aside>
-
         <main class="main-content">
             <header class="topbar">
-                <div class="breadcrumbs">Workspace <span>/</span> <strong>Overview</strong></div>
+            <a class="brand" href="{{ route('dashboard') }}">
+                <span class="brand-mark">N</span>
+                <span><strong>Net<span>Work</span></strong><small>MONITORING CENTER</small></span>
+            </a>
+                <nav class="primary-nav" id="primary-nav" aria-label="Main navigation">
+                    <a class="nav-link {{ $inventoryPage ? '' : 'active' }}" href="{{ route('dashboard') }}">Overview</a>
+                    <a class="nav-link {{ $inventoryPage ? 'active' : '' }}" href="{{ route('devices.inventory') }}">▤ Device inventory <span class="nav-count" id="device-count">0</span></a>
+                </nav>
                 <div class="topbar-actions">
                     <span class="sync-label"><span class="pulse-dot"></span><span id="last-updated">Connecting…</span></span>
                     <button class="button button-quiet" id="refresh-button" type="button"><span class="refresh-icon">↻</span> Refresh</button>
                 </div>
             </header>
 
+            @unless($inventoryPage)
             <section class="page-heading">
                 <div>
                     <div class="eyebrow">NETWORK OPERATIONS</div>
@@ -55,7 +49,9 @@
                     <input type="file" id="import-file" accept=".csv,text/csv" hidden>
                 </div>
             </section>
+            @endunless
 
+            @unless($inventoryPage)
             <section class="summary-grid" aria-label="NVR status summary">
                 <article class="summary-card">
                     <div class="summary-top"><span class="summary-label">Total recorders</span><span class="summary-icon icon-total">▤</span></div>
@@ -78,14 +74,23 @@
                     <div class="summary-caption">Enabled recorders awaiting their first check</div>
                 </article>
             </section>
+            @endunless
 
             <section class="inventory-card" id="device-inventory">
                 <div class="inventory-heading">
                     <div>
-                        <div class="inventory-title-row"><h2>Device inventory</h2><span class="live-badge"><span class="pulse-dot"></span> LIVE</span></div>
-                        <p>Health checks run every minute. This table refreshes automatically.</p>
+                        <div class="inventory-title-row"><h2>{{ $inventoryPage ? 'All recorders' : 'Device inventory' }}</h2><span class="live-badge"><span class="pulse-dot"></span> LIVE</span></div>
+                        <p>Health checks run every 5 seconds. This view refreshes automatically.</p>
                     </div>
-                    <button class="button button-quiet check-all-button" id="check-all-button" type="button">Check all now <span>→</span></button>
+                    <div class="inventory-heading-actions">
+                        @if($inventoryPage)
+                        <button class="button button-outline" id="import-button" type="button">Import CSV</button>
+                        <a class="template-link" href="{{ route('devices.import-template') }}">Download template</a>
+                        <button class="button button-primary" id="add-device-button" type="button"><span>＋</span> Add NVR</button>
+                        <input type="file" id="import-file" accept=".csv,text/csv" hidden>
+                        @endif
+                        <button class="button button-quiet check-all-button" id="check-all-button" type="button">Check all now <span>→</span></button>
+                    </div>
                 </div>
                 <div class="table-toolbar">
                     <label class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="Search name, IP, site..." autocomplete="off"></label>
@@ -99,12 +104,23 @@
                         </select>
                     </label>
                 </div>
+                @if($inventoryPage)
+                <div class="device-grid" id="device-grid" aria-live="polite">
+                    <div class="grid-empty">Loading your NVR inventory…</div>
+                </div>
+                @else
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>RECORDER</th><th>SITE</th><th>MANAGEMENT PORT</th><th>STATUS</th><th>RESPONSE</th><th>LAST CHECKED</th><th></th></tr></thead>
-                        <tbody id="device-rows"><tr><td class="table-empty" colspan="7">Loading your NVR inventory…</td></tr></tbody>
+                        <thead><tr><th>RECORDER</th>
+                            <th>SITE</th>
+                            <th>STATUS</th>
+                            <th>PING</th>
+                            <th>LAST CHECKED</th>
+                            <th></th></tr></thead>
+                        <tbody id="device-rows"><tr><td class="table-empty" colspan="6">Loading your NVR inventory…</td></tr></tbody>
                     </table>
                 </div>
+                @endif
                 <div class="table-footer">
                     <span id="page-summary">Loading devices…</span>
                     <div class="pagination-controls">
@@ -114,7 +130,6 @@
                     </div>
                 </div>
             </section>
-            <footer class="page-footer"><span>NVR Desk <span id="current-year"></span></span><span>TCP port reachability monitoring</span></footer>
         </main>
     </div>
 
@@ -124,11 +139,11 @@
                 <div><div class="eyebrow">DEVICE INVENTORY</div><h2 id="dialog-title">Add an NVR</h2></div>
                 <button class="icon-button" id="close-dialog" type="button" aria-label="Close">×</button>
             </div>
-            <p class="dialog-description">Enter the recorder's LAN address and a TCP management port to check.</p>
+            <p class="dialog-description">Online status is based on pinging the IP. The TCP port is saved for reference and does not affect the ping check.</p>
             <div class="form-grid">
                 <label class="form-field full-width">Recorder name <span>*</span><input name="name" maxlength="120" placeholder="e.g. Main Gate NVR" required></label>
                 <label class="form-field">IP address <span>*</span><input name="ip" inputmode="decimal" placeholder="192.168.1.201" required></label>
-                <label class="form-field">Management port <span>*</span><input name="port" type="number" min="1" max="65535" value="80" required></label>
+                <label class="form-field">TCP port (info only) <span>*</span><input name="port" type="number" min="1" max="65535" value="80" required></label>
                 <label class="form-field">Site / location<input name="site" maxlength="120" placeholder="Main office"></label>
                 <label class="form-field">Brand / vendor<input name="vendor" maxlength="120" placeholder="Optional"></label>
                 <label class="form-field">Camera channels<input name="channels" type="number" min="1" max="256" placeholder="Optional"></label>

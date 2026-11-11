@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\NvrDevice;
 use App\Models\NvrHealthCheck;
-use App\Services\TcpPortProbe;
+use App\Services\PingProbe;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -15,9 +15,9 @@ class CheckNvrReachability implements ShouldQueue, ShouldBeUnique
 
     public int $tries = 1;
 
-    public int $timeout = 5;
+    public int $timeout = 7;
 
-    public int $uniqueFor = 50;
+    public int $uniqueFor = 60;
 
     public function __construct(public int $deviceId)
     {
@@ -29,7 +29,7 @@ class CheckNvrReachability implements ShouldQueue, ShouldBeUnique
         return (string) $this->deviceId;
     }
 
-    public function handle(TcpPortProbe $probe): void
+    public function handle(PingProbe $probe): void
     {
         $device = NvrDevice::find($this->deviceId);
 
@@ -37,9 +37,10 @@ class CheckNvrReachability implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        $result = $probe->check($device->ip, $device->port);
+        $result = $probe->check($device->ip);
         $checkedAt = now();
         $status = $result['online'] ? 'online' : 'offline';
+        $statusChanged = $device->status !== $status;
 
         $device->update([
             'status' => $status,
@@ -48,12 +49,14 @@ class CheckNvrReachability implements ShouldQueue, ShouldBeUnique
             'last_error' => $result['message'] ? mb_substr($result['message'], 0, 255) : null,
         ]);
 
-        NvrHealthCheck::create([
-            'nvr_device_id' => $device->id,
-            'status' => $status,
-            'latency_ms' => $result['latency_ms'],
-            'message' => $result['message'],
-            'checked_at' => $checkedAt,
-        ]);
+        if ($statusChanged) {
+            NvrHealthCheck::create([
+                'nvr_device_id' => $device->id,
+                'status' => $status,
+                'latency_ms' => $result['latency_ms'],
+                'message' => $result['message'],
+                'checked_at' => $checkedAt,
+            ]);
+        }
     }
 }

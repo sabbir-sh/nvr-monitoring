@@ -13,7 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->command('nvr:check-all')->everyMinute()->withoutOverlapping();
+        $schedule->command('nvr:check-all')->everyFiveSeconds()->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         //

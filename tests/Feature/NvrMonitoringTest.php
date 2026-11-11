@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\CheckNvrReachability;
 use App\Models\NvrDevice;
 use App\Models\NvrHealthCheck;
-use App\Services\TcpPortProbe;
+use App\Services\PingProbe;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -27,13 +27,69 @@ class NvrMonitoringTest extends TestCase
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('Device inventory');
+            ->assertSee('Device inventory')
+            ->assertDontSee('TCP PORT (INFO)');
 
         $this->getJson('/dashboard/data')
             ->assertOk()
             ->assertJsonPath('summary.total', 1)
             ->assertJsonPath('summary.online', 1)
             ->assertJsonPath('devices.0.name', 'Main Gate');
+    }
+
+    public function test_device_inventory_has_a_separate_compact_grid_page(): void
+    {
+        $this->get('/devices/inventory')
+            ->assertOk()
+            ->assertSee('Device inventory')
+            ->assertSee('id="primary-nav"', false)
+            ->assertDontSee('class="sidebar"', false)
+            ->assertSee('id="device-grid"', false)
+            ->assertSee('All recorders')
+            ->assertDontSee('NETWORK OPERATIONS')
+            ->assertSee('id="add-device-button"', false)
+            ->assertDontSee('id="device-rows"', false);
+    }
+
+    public function test_device_inventory_returns_eight_devices_per_page(): void
+    {
+        for ($number = 1; $number <= 9; $number++) {
+            NvrDevice::create([
+                'name' => sprintf('Recorder %02d', $number),
+                'ip' => '192.168.1.'.(200 + $number),
+                'port' => 80,
+            ]);
+        }
+
+        $this->getJson('/dashboard/data')
+            ->assertOk()
+            ->assertJsonCount(8, 'devices')
+            ->assertJsonPath('pagination.per_page', 8);
+    }
+
+    public function test_demo_seeder_fills_inventory_to_eight_without_overwriting_existing_devices(): void
+    {
+        $existing = NvrDevice::create([
+            'name' => 'My Recorder',
+            'ip' => '192.168.1.201',
+            'port' => 80,
+            'status' => 'online',
+        ]);
+
+        $this->seed(\Database\Seeders\NvrDemoSeeder::class);
+        $this->seed(\Database\Seeders\NvrDemoSeeder::class);
+
+        $this->assertDatabaseCount('nvr_devices', 8);
+        $this->assertDatabaseHas('nvr_devices', [
+            'id' => $existing->id,
+            'name' => 'My Recorder',
+            'ip' => '192.168.1.201',
+            'status' => 'online',
+        ]);
+        $this->assertDatabaseHas('nvr_devices', [
+            'ip' => '192.0.2.101',
+            'enabled' => false,
+        ]);
     }
 
     public function test_invalid_ip_is_rejected_when_creating_a_device(): void
@@ -60,8 +116,8 @@ class NvrMonitoringTest extends TestCase
     public function test_health_job_updates_device_and_records_history(): void
     {
         $device = NvrDevice::create(['name' => 'Recorder', 'ip' => '192.168.1.203', 'port' => 8000]);
-        $probe = Mockery::mock(TcpPortProbe::class);
-        $probe->shouldReceive('check')->once()->with($device->ip, $device->port)->andReturn([
+        $probe = Mockery::mock(PingProbe::class);
+        $probe->shouldReceive('check')->once()->with($device->ip)->andReturn([
             'online' => true,
             'latency_ms' => 24,
             'message' => null,
@@ -70,6 +126,85 @@ class NvrMonitoringTest extends TestCase
         (new CheckNvrReachability($device->id))->handle($probe);
 
         $this->assertDatabaseHas('nvr_devices', ['id' => $device->id, 'status' => 'online', 'latency_ms' => 24]);
+        $this->assertSame(1, NvrHealthCheck::where('nvr_device_id', $device->id)->count());
+    }
+
+    public function test_ping_probe_requires_two_of_three_replies_to_mark_device_online(): void
+    {
+        $probe = new PingProbe;
+        $majorityReply = "Reply from 192.168.0.196: bytes=32 time=4ms TTL=64\n"
+            ."Reply from 192.168.0.196: bytes=32 time=6ms TTL=64\n"
+            ."Packets: Sent = 3, Received = 2, Lost = 1 (33% loss)\n"
+            ."Approximate round trip times in milli-seconds: Minimum = 4ms, Maximum = 6ms, Average = 5ms";
+        $singleReply = "Reply from 192.168.0.196: bytes=32 time=4ms TTL=64\n"
+            ."Packets: Sent = 3, Received = 1, Lost = 2 (67% loss)";
+
+        $this->assertSame([
+            'online' => true,
+            'latency_ms' => 5,
+            'message' => null,
+        ], $probe->parseOutput($majorityReply, true, '192.168.0.196'));
+
+        $this->assertSame([
+            'online' => false,
+            'latency_ms' => null,
+            'message' => 'Incomplete ping response (1 of 3 replies from target).',
+        ], $probe->parseOutput($singleReply, true, '192.168.0.196'));
+    }
+
+    public function test_router_unreachable_replies_do_not_mark_target_online(): void
+    {
+        $probe = new PingProbe;
+        $output = "Reply from 192.168.0.194: Destination host unreachable.\n"
+            ."Reply from 192.168.0.194: Destination host unreachable.\n"
+            ."Reply from 192.168.0.194: Destination host unreachable.\n"
+            ."Packets: Sent = 3, Received = 3, Lost = 0 (0% loss)";
+
+        $this->assertSame([
+            'online' => false,
+            'latency_ms' => null,
+            'message' => 'No ping response from 192.168.0.196.',
+        ], $probe->parseOutput($output, true, '192.168.0.196'));
+    }
+
+    public function test_incomplete_ping_keeps_an_offline_device_offline(): void
+    {
+        $device = NvrDevice::create([
+            'name' => 'Recorder',
+            'ip' => '192.168.1.205',
+            'port' => 80,
+            'status' => 'offline',
+        ]);
+        $probe = Mockery::mock(PingProbe::class);
+        $probe->shouldReceive('check')->once()->with($device->ip)->andReturn([
+            'online' => false,
+            'latency_ms' => null,
+            'message' => 'Incomplete ping response (1 of 3 replies from target).',
+        ]);
+
+        (new CheckNvrReachability($device->id))->handle($probe);
+
+        $this->assertDatabaseHas('nvr_devices', [
+            'id' => $device->id,
+            'status' => 'offline',
+            'latency_ms' => null,
+            'last_error' => 'Incomplete ping response (1 of 3 replies from target).',
+        ]);
+    }
+
+    public function test_repeated_health_checks_only_record_status_changes(): void
+    {
+        $device = NvrDevice::create(['name' => 'Recorder', 'ip' => '192.168.1.204', 'port' => 80]);
+        $probe = Mockery::mock(PingProbe::class);
+        $probe->shouldReceive('check')->twice()->andReturn([
+            'online' => true,
+            'latency_ms' => 24,
+            'message' => null,
+        ]);
+
+        (new CheckNvrReachability($device->id))->handle($probe);
+        (new CheckNvrReachability($device->id))->handle($probe);
+
         $this->assertSame(1, NvrHealthCheck::where('nvr_device_id', $device->id)->count());
     }
 
