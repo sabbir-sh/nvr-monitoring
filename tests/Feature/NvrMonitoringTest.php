@@ -51,10 +51,12 @@ class NvrMonitoringTest extends TestCase
             ->assertSee('All recorders')
             ->assertDontSee('NETWORK OPERATIONS')
             ->assertSee('id="add-device-button"', false)
+            ->assertDontSee('id="previous-page"', false)
+            ->assertDontSee('id="next-page"', false)
             ->assertDontSee('id="device-rows"', false);
     }
 
-    public function test_device_inventory_returns_eight_devices_per_page(): void
+    public function test_dashboard_data_returns_eight_devices_per_page(): void
     {
         Queue::fake();
         for ($number = 1; $number <= 9; $number++) {
@@ -69,6 +71,26 @@ class NvrMonitoringTest extends TestCase
             ->assertOk()
             ->assertJsonCount(8, 'devices')
             ->assertJsonPath('pagination.per_page', 8);
+    }
+
+    public function test_all_devices_can_be_returned_without_pagination(): void
+    {
+        Queue::fake();
+        for ($number = 1; $number <= 9; $number++) {
+            NvrDevice::create([
+                'name' => sprintf('Recorder %02d', $number),
+                'ip' => '192.168.1.'.(200 + $number),
+                'port' => 80,
+            ]);
+        }
+
+        $this->getJson('/dashboard/data?all=1')
+            ->assertOk()
+            ->assertJsonCount(9, 'devices')
+            ->assertJsonPath('pagination.current_page', 1)
+            ->assertJsonPath('pagination.last_page', 1)
+            ->assertJsonPath('pagination.per_page', 9)
+            ->assertJsonPath('pagination.total', 9);
     }
 
     public function test_demo_seeder_fills_inventory_to_eight_without_overwriting_existing_devices(): void

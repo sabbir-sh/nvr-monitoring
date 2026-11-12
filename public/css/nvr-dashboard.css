@@ -89,7 +89,7 @@ h1 { margin-top: 7px; color: #19233b; font: 800 27px Manrope, sans-serif; letter
 .filter-label select { min-width: 120px; height: 33px; padding: 0 9px; border: 1px solid #e6eaf1; border-radius: 6px; outline: 0; color: #45516a; background: white; font-size: 10px; }
 .table-wrap { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: left; }
-.device-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 17px; }
+.device-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 17px; }
 .device-card { min-width: 0; padding: 13px; border: 1px solid #e9edf4; border-radius: 9px; background: #fff; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
 .device-card:hover { transform: translateY(-1px); border-color: #d7def0; box-shadow: 0 5px 16px #17213b0b; }
 .device-card-heading, .device-card-identity, .device-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 9px; }

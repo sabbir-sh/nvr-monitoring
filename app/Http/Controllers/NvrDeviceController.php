@@ -61,18 +61,30 @@ class NvrDeviceController extends Controller
             $query->where('enabled', false);
         }
 
-        $devices = $query->orderBy('name')->paginate(8)->withQueryString();
+        if ($request->boolean('all')) {
+            $devices = $query->orderBy('name')->get();
+            $pagination = [
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => $devices->count(),
+                'total' => $devices->count(),
+            ];
+        } else {
+            $paginator = $query->orderBy('name')->paginate(8)->withQueryString();
+            $devices = $paginator->items();
+            $pagination = [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ];
+        }
 
         $checkedAt = NvrDevice::query()->max('last_checked_at');
 
         return response()->json([
-            'devices' => $devices->items(),
-            'pagination' => [
-                'current_page' => $devices->currentPage(),
-                'last_page' => $devices->lastPage(),
-                'per_page' => $devices->perPage(),
-                'total' => $devices->total(),
-            ],
+            'devices' => $devices,
+            'pagination' => $pagination,
             'summary' => $this->summary(),
             'checked_at' => $checkedAt
                 ? Carbon::parse($checkedAt, config('app.timezone'))->toIso8601String()

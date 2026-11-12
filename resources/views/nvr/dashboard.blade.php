@@ -123,11 +123,13 @@
                 @endif
                 <div class="table-footer">
                     <span id="page-summary">Loading devices…</span>
+                    @unless($inventoryPage)
                     <div class="pagination-controls">
                         <button class="button button-page" id="previous-page" type="button">← Previous</button>
                         <span id="page-number">1 / 1</span>
                         <button class="button button-page" id="next-page" type="button">Next →</button>
                     </div>
+                    @endunless
                 </div>
             </section>
         </main>

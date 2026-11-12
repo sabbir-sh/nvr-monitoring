@@ -7,7 +7,6 @@
     const form = document.getElementById('device-form');
     const errors = document.getElementById('form-errors');
     const toast = document.getElementById('toast');
-    const pageSize = 8;
     let page = 1;
     let lastPage = 1;
     let deviceCache = new Map();
@@ -137,6 +136,7 @@
             search: document.getElementById('search-input').value.trim(),
             status: document.getElementById('status-filter').value
         });
+        if (inventoryPage) parameters.set('all', '1');
         const controller = new AbortController();
         const requestTimeout = window.setTimeout(() => controller.abort(), 10000);
 
@@ -153,7 +153,7 @@
             notifyOfflineDevices(result.summary.offline);
             deviceCache = new Map(result.devices.map((device) => [String(device.id), device]));
             lastPage = Math.max(1, result.pagination.last_page);
-            if (page > lastPage) {
+            if (!inventoryPage && page > lastPage) {
                 page = lastPage;
                 return refresh();
             }
@@ -164,12 +164,17 @@
                     ? '<div class="grid-empty">No NVRs found. Add a device or import your CSV list.</div>'
                     : '<tr><td class="table-empty" colspan="6">No NVRs found. Add a device or import your CSV list.</td></tr>';
 
-            const first = result.pagination.total ? ((page - 1) * pageSize) + 1 : 0;
-            const last = Math.min(page * pageSize, result.pagination.total);
-            document.getElementById('page-summary').textContent = `Showing ${first}–${last} of ${result.pagination.total} devices`;
-            document.getElementById('page-number').textContent = `${page} / ${lastPage}`;
-            document.getElementById('previous-page').disabled = page <= 1;
-            document.getElementById('next-page').disabled = page >= lastPage;
+            const total = result.pagination.total;
+            const first = total ? ((page - 1) * result.pagination.per_page) + 1 : 0;
+            const last = Math.min(page * result.pagination.per_page, total);
+            document.getElementById('page-summary').textContent = inventoryPage
+                ? `Showing all ${total} devices`
+                : `Showing ${first}–${last} of ${total} devices`;
+            if (!inventoryPage) {
+                document.getElementById('page-number').textContent = `${page} / ${lastPage}`;
+                document.getElementById('previous-page').disabled = page <= 1;
+                document.getElementById('next-page').disabled = page >= lastPage;
+            }
             const lastChecked = result.checked_at
                 ? new Date(result.checked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                 : null;
@@ -223,8 +228,10 @@
     document.getElementById('close-dialog').addEventListener('click', () => dialog.close());
     document.getElementById('cancel-dialog').addEventListener('click', () => dialog.close());
     document.getElementById('refresh-button').addEventListener('click', refresh);
-    document.getElementById('previous-page').addEventListener('click', () => { if (page > 1) { page--; refresh(); } });
-    document.getElementById('next-page').addEventListener('click', () => { if (page < lastPage) { page++; refresh(); } });
+    if (!inventoryPage) {
+        document.getElementById('previous-page').addEventListener('click', () => { if (page > 1) { page--; refresh(); } });
+        document.getElementById('next-page').addEventListener('click', () => { if (page < lastPage) { page++; refresh(); } });
+    }
 
     document.getElementById('search-input').addEventListener('input', () => {
         window.clearTimeout(searchTimer);
